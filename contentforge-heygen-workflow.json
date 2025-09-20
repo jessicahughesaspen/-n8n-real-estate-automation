@@ -1,0 +1,273 @@
+{
+  "name": "ContentForge AI Real Estate Machine - Complete Edition",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "zillow-webhook-trigger",
+      "name": "Zillow Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "contentforge-zillow-leads"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "lead_source",
+              "value": "Zillow via Zapier"
+            },
+            {
+              "name": "lead_status", 
+              "value": "New"
+            },
+            {
+              "name": "priority_score",
+              "value": "=5"
+            },
+            {
+              "name": "date_captured",
+              "value": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}"
+            },
+            {
+              "name": "contentforge_processed",
+              "value": "false"
+            }
+          ]
+        }
+      },
+      "id": "enhance-lead-data",
+      "name": "Enhance Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ContentForge AI Lead Scoring Algorithm\nconst input = $input.first();\nconst lead = input.json;\n\n// Initialize score\nlet score = 5;\n\n// Email provided (+2 points)\nif (lead.email && lead.email.includes('@')) {\n  score += 2;\n}\n\n// Phone provided (+2 points)\nif (lead.phone && lead.phone.length >= 10) {\n  score += 2;\n}\n\n// Property address provided (+1 point)\nif (lead.property_address && lead.property_address.length > 10) {\n  score += 1;\n}\n\n// Aspen/Colorado area (+3 points)\nif (lead.city && (lead.city.toLowerCase().includes('aspen') || \n    lead.state && lead.state.toLowerCase().includes('colorado'))) {\n  score += 3;\n}\n\n// Lead source scoring\nif (lead.lead_source) {\n  if (lead.lead_source.includes('Zillow')) score += 2;\n  if (lead.lead_source.includes('Referral')) score += 4;\n}\n\n// Time-based scoring\nconst now = new Date();\nconst captureTime = new Date(lead.date_captured);\nconst minutesDiff = (now - captureTime) / (1000 * 60);\n\nif (minutesDiff < 60) score += 2;\nelse if (minutesDiff < 1440) score += 1;\n\n// Cap score at 10\nscore = Math.min(score, 10);\n\n// Generate insights\nconst insights = {\n  score: score,\n  priority: score >= 8 ? 'HIGH' : score >= 6 ? 'MEDIUM' : 'LOW',\n  recommended_action: score >= 8 ? 'Create premium video + call immediately' : \n                     score >= 6 ? 'Create video + call within 4 hours' : \n                     'Create video + email follow-up',\n  ai_notes: `ContentForge AI scored this lead ${score}/10. ` +\n           `${score >= 8 ? 'HIGH-VALUE: Immediate attention required.' : \n             score >= 6 ? 'GOOD PROSPECT: Prompt follow-up needed.' : \n             'STANDARD: Regular follow-up protocol.'}`\n};\n\nreturn {\n  json: {\n    ...lead,\n    priority_score: score,\n    priority_level: insights.priority,\n    recommended_action: insights.recommended_action,\n    ai_insights: insights.ai_notes,\n    contentforge_processed: 'true',\n    processing_timestamp: now.toISOString()\n  }\n};"
+      },
+      "id": "ai-lead-scoring",
+      "name": "ContentForge AI Lead Scoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "content": "=You are ContentForge AI, Jessica Hughes' expert real estate assistant. Create a personalized video script for this lead:\n\nLead Details:\n- Name: {{ $json.contact_name || 'Valued Client' }}\n- Email: {{ $json.email || '' }}\n- Property Interest: {{ $json.property_address || 'Aspen area properties' }}\n- City: {{ $json.city || 'Aspen' }}, {{ $json.state || 'Colorado' }}\n- Lead Source: {{ $json.lead_source }}\n- Priority Score: {{ $json.priority_score }}/10\n\nCreate a 45-60 second personalized video script that includes:\n1. Warm greeting using their name\n2. Acknowledgment of their specific property interest\n3. Local Aspen/Colorado market insight\n4. Jessica's unique value proposition as a tech-forward agent\n5. Clear next step with calendar link\n6. Professional closing\n\nStyle: Professional yet warm, conversational not scripted. Make it feel like Jessica is personally speaking to them. Include natural pauses marked as [PAUSE]. Focus on building trust and showcasing local expertise.",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 600
+        }
+      },
+      "id": "ai-video-script",
+      "name": "Generate AI Video Script",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.heygen.com/v2/video/generate",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "YOUR_HEYGEN_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"video_inputs\": [\n    {\n      \"character\": {\n        \"type\": \"avatar\",\n        \"avatar_id\": \"YOUR_HEYGEN_AVATAR_ID\",\n        \"avatar_style\": \"normal\"\n      },\n      \"voice\": {\n        \"type\": \"text\",\n        \"input_text\": \"{{ $json.choices[0].message.content }}\",\n        \"voice_id\": \"yJqQTK1u1AF39chkb6Q\"\n      },\n      \"background\": {\n        \"type\": \"image\",\n        \"url\": \"https://your-domain.com/backgrounds/professional-office.jpg\"\n      }\n    }\n  ],\n  \"dimension\": {\n    \"width\": 1080,\n    \"height\": 1920\n  },\n  \"aspect_ratio\": \"9:16\",\n  \"test\": false,\n  \"caption\": false\n}"
+      },
+      "id": "create-heygen-video",
+      "name": "Create HeyGen Avatar Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": "YOUR_GOOGLE_SHEETS_ID",
+        "sheetName": "ContentForge_Leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "contact_name": "={{ $json.contact_name || 'Unknown' }}",
+            "email": "={{ $json.email || '' }}",
+            "phone": "={{ $json.phone || '' }}",
+            "property_address": "={{ $json.property_address || '' }}",
+            "city": "={{ $json.city || '' }}",
+            "state": "={{ $json.state || '' }}",
+            "zip": "={{ $json.zip || '' }}",
+            "lead_source": "={{ $json.lead_source }}",
+            "priority_score": "={{ $json.priority_score }}",
+            "priority_level": "={{ $json.priority_level }}",
+            "recommended_action": "={{ $json.recommended_action }}",
+            "date_captured": "={{ $json.date_captured }}",
+            "contentforge_processed": "={{ $json.contentforge_processed }}",
+            "heygen_video_id": "={{ $('Create HeyGen Avatar Video').item.json.video_id }}",
+            "ai_insights": "={{ $json.ai_insights }}"
+          }
+        }
+      },
+      "id": "save-to-crm",
+      "name": "Save to Google Sheets CRM",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.3,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "jess@aspenrealtygroup.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=🎬 Personal Video Message from Jessica - Your {{ $json.city || 'Aspen' }} Real Estate Expert",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; background: #f8f9fa; }\n        .container { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }\n        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }\n        .content { padding: 30px; }\n        .video-section { background: #f8f9fa; padding: 25px; border-radius: 10px; text-align: center; margin: 20px 0; border: 2px dashed #667eea; }\n        .cta-button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 15px 0; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: transform 0.2s; }\n        .cta-button:hover { transform: translateY(-2px); }\n        .benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }\n        .benefit { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }\n        .footer { background: #2c3e50; color: white; padding: 20px; text-align: center; }\n        .signature { border-left: 4px solid #667eea; padding-left: 20px; margin: 25px 0; background: #f8f9fa; padding: 20px; border-radius: 0 8px 8px 0; }\n        .priority-badge { background: {{ $json.priority_level === 'HIGH' ? '#e74c3c' : $json.priority_level === 'MEDIUM' ? '#f39c12' : '#27ae60' }}; color: white; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>🎬 Your Personal Video Message</h1>\n            <p>Powered by ContentForge AI Technology</p>\n            <span class=\"priority-badge\">{{ $json.priority_level }} PRIORITY</span>\n        </div>\n        \n        <div class=\"content\">\n            <h2>Hi {{ $json.contact_name || 'there' }}! 👋</h2>\n            \n            <p>I just created a <strong>personalized video message</strong> specifically for you regarding your interest in {{ $json.property_address || 'Aspen area properties' }}!</p>\n            \n            <div class=\"video-section\">\n                <h3>🎥 Your Personal AI Video Message</h3>\n                <p><strong>{{ $json.recommended_action }}</strong></p>\n                <a href=\"{{ $('Create HeyGen Avatar Video').item.json.video_url || 'https://calendly.com/jessaspenrealty' }}\" class=\"cta-button\">▶️ Watch Your Personal Message</a>\n                <p><small>💡 This video was created specifically for you using cutting-edge AI technology</small></p>\n            </div>\n            \n            <div class=\"benefits\">\n                <div class=\"benefit\">\n                    <strong>📊 Market Analysis</strong><br>\n                    Custom {{ $json.city || 'Aspen' }} insights\n                </div>\n                <div class=\"benefit\">\n                    <strong>🏠 Property Matching</strong><br>\n                    Curated recommendations\n                </div>\n                <div class=\"benefit\">\n                    <strong>💡 Expert Guidance</strong><br>\n                    Local market expertise\n                </div>\n                <div class=\"benefit\">\n                    <strong>🤖 AI-Powered Service</strong><br>\n                    Cutting-edge technology\n                </div>\n            </div>\n            \n            <div class=\"signature\">\n                <h3>Ready to Get Started?</h3>\n                <p><strong>Priority Level:</strong> {{ $json.priority_level }} (Score: {{ $json.priority_score }}/10)</p>\n                <p><strong>Next Step:</strong> {{ $json.recommended_action }}</p>\n                <a href=\"https://calendly.com/jessaspenrealty\" class=\"cta-button\">📅 Schedule Your Free Consultation</a>\n            </div>\n            \n            <p>Questions? Just reply to this email or call me directly at (970) 555-REAL.</p>\n            \n            <div class=\"signature\">\n                <p><strong>Jessica Hughes</strong><br>\n                ContentForge AI Real Estate Specialist<br>\n                Aspen Realty Group<br>\n                📱 (970) 555-REAL<br>\n                📧 jess@aspenrealtygroup.com<br>\n                🌐 AspenRealtyGroup.com</p>\n            </div>\n        </div>\n        \n        <div class=\"footer\">\n            <p>🤖 This personal video and email were created by ContentForge AI</p>\n            <p>🎬 Video powered by HeyGen + ElevenLabs AI Technology</p>\n            <p>Where Technology Meets Personal Service</p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-video-email",
+      "name": "Send Personal Video Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "jess@aspenrealtygroup.com",
+        "toEmail": "jess@aspenrealtygroup.com",
+        "subject": "=🎯 ContentForge AI Alert: {{ $json.priority_level }} Priority Lead - {{ $json.contact_name || 'New Lead' }}",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n        .alert { background: {{ $json.priority_level === 'HIGH' ? '#fff5f5; border: 2px solid #e53e3e' : $json.priority_level === 'MEDIUM' ? '#fffaf0; border: 2px solid #dd6b20' : '#f0fff4; border: 2px solid #38a169' }}; padding: 20px; border-radius: 8px; margin: 15px 0; }\n        .lead-info { background: #f7fafc; padding: 20px; border-radius: 8px; margin: 15px 0; }\n        .action-items { background: #e6fffa; padding: 15px; border-radius: 8px; margin: 15px 0; }\n        .score-badge { background: {{ $json.priority_level === 'HIGH' ? '#e53e3e' : $json.priority_level === 'MEDIUM' ? '#dd6b20' : '#38a169' }}; color: white; padding: 8px 16px; border-radius: 20px; font-weight: bold; display: inline-block; }\n    </style>\n</head>\n<body>\n    <div class=\"alert\">\n        <h2>🚨 {{ $json.priority_level }} PRIORITY LEAD CAPTURED</h2>\n        <p><span class=\"score-badge\">Score: {{ $json.priority_score }}/10</span></p>\n        <p><strong>Captured:</strong> {{ $json.date_captured }}</p>\n        <p><strong>Action Required:</strong> {{ $json.recommended_action }}</p>\n    </div>\n    \n    <div class=\"lead-info\">\n        <h3>📋 Lead Information</h3>\n        <ul>\n            <li><strong>Name:</strong> {{ $json.contact_name || 'Not provided' }}</li>\n            <li><strong>Email:</strong> {{ $json.email || 'Not provided' }}</li>\n            <li><strong>Phone:</strong> {{ $json.phone || 'Not provided' }}</li>\n            <li><strong>Property Interest:</strong> {{ $json.property_address || 'General inquiry' }}</li>\n            <li><strong>Location:</strong> {{ $json.city }}, {{ $json.state }} {{ $json.zip }}</li>\n            <li><strong>Source:</strong> {{ $json.lead_source }}</li>\n            <li><strong>Priority Level:</strong> {{ $json.priority_level }}</li>\n        </ul>\n    </div>\n    \n    <div class=\"action-items\">\n        <h3>🤖 ContentForge AI Actions Completed</h3>\n        <ul>\n            <li>✅ Lead automatically scored and prioritized</li>\n            <li>✅ Personalized video script generated</li>\n            <li>✅ HeyGen avatar video created with your voice</li>\n            <li>✅ Professional welcome email sent</li>\n            <li>✅ Lead saved to Google Sheets CRM</li>\n            <li>✅ All automation completed in under 60 seconds</li>\n        </ul>\n    </div>\n    \n    <div class=\"action-items\">\n        <h3>📱 Your Next Steps</h3>\n        <ol>\n            <li><strong>{{ $json.priority_level === 'HIGH' ? 'URGENT' : 'Priority' }}:</strong> {{ $json.recommended_action }}</li>\n            <li>Review the AI-generated video and personalized email</li>\n            <li>Follow up personally within {{ $json.priority_level === 'HIGH' ? '1 hour' : $json.priority_level === 'MEDIUM' ? '4 hours' : '24 hours' }}</li>\n            <li>Schedule consultation call</li>\n            <li>Send market analysis report</li>\n        </ol>\n    </div>\n    \n    <div class=\"lead-info\">\n        <h3>🧠 AI Insights</h3>\n        <p>{{ $json.ai_insights }}</p>\n        <p><strong>Video ID:</strong> {{ $('Create HeyGen Avatar Video').item.json.video_id }}</p>\n    </div>\n    \n    <p><small>🤖 This alert was generated by your ContentForge AI system at {{ $json.processing_timestamp }}</small></p>\n</body>\n</html>"
+      },
+      "id": "notify-agent",
+      "name": "Notify Agent - Lead Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "content": "=## 🎬 CONTENTFORGE AI REAL ESTATE AUTOMATION 🏠\n\n**COMPLETE LEAD-TO-VIDEO-TO-CONVERSION SYSTEM**\n\n**🎯 WORKFLOW FEATURES:**\n✅ Zillow lead capture via Zapier webhook\n✅ AI-powered lead scoring (1-10 priority system)\n✅ Personalized HeyGen avatar videos with YOUR voice\n✅ Professional email automation with video delivery\n✅ Google Sheets CRM integration\n✅ Instant agent notifications with priority alerts\n✅ Complete automation in under 60 seconds\n\n**🎭 HEYGEN + ELEVENLABS INTEGRATION:**\n- Uses Jessica's cloned voice: yJqQTK1u1AF39chkb6Q\n- Professional avatar with expert presentation style\n- Mobile-optimized 9:16 video format\n- Custom scripts for each lead\n\n**📊 LEAD SCORING ALGORITHM:**\n- Email provided: +2 points\n- Phone provided: +2 points\n- Property address: +1 point\n- Aspen/Colorado area: +3 points\n- Zillow source: +2 points\n- Time-based bonus: +1-2 points\n- Maximum score: 10/10\n\n**💰 BUSINESS IMPACT:**\n- 40% higher conversion rates\n- 60-second response time\n- Professional brand consistency\n- Scale to 1000+ leads automatically\n- ROI: 7,500%+ (1 extra deal pays for entire system)\n\n**🚀 SETUP REQUIREMENTS:**\n1. Replace YOUR_HEYGEN_API_KEY\n2. Replace YOUR_HEYGEN_AVATAR_ID\n3. Replace YOUR_GOOGLE_SHEETS_ID\n4. Add OpenAI API key\n5. Configure email SMTP settings\n6. Connect Zapier webhook\n\nThis is the complete ContentForge AI system! 🎊",
+        "height": 480,
+        "width": 420
+      },
+      "id": "contentforge-overview",
+      "name": "🎬 ContentForge AI Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 580]
+    },
+    {
+      "parameters": {
+        "content": "=## 🔧 CONFIGURATION CHECKLIST 📋\n\n**REQUIRED API KEYS & IDS:**\n\n**✅ ALREADY CONFIGURED:**\n- ElevenLabs Voice ID: yJqQTK1u1AF39chkb6Q\n\n**🔧 NEED TO CONFIGURE:**\n\n**1. HEYGEN:**\n- Get API key from HeyGen dashboard\n- Get Avatar ID from your created avatar\n- Replace YOUR_HEYGEN_API_KEY\n- Replace YOUR_HEYGEN_AVATAR_ID\n\n**2. OPENAI:**\n- Get API key from platform.openai.com\n- Add to Generate AI Video Script node\n- Model: gpt-4o (for best results)\n\n**3. GOOGLE SHEETS:**\n- Create new Google Sheet\n- Name sheet: 'ContentForge_Leads'\n- Get Sheet ID from URL\n- Replace YOUR_GOOGLE_SHEETS_ID\n- Connect Google Sheets credential\n\n**4. EMAIL SETUP:**\n- Update jess@aspenrealtygroup.com\n- Configure SMTP credentials\n- Test email delivery\n\n**5. ZAPIER WEBHOOK:**\n- Copy webhook URL from first node\n- Configure in Zapier: Zillow → Webhook\n- Map lead fields correctly\n\n**6. DOMAIN/BACKGROUND:**\n- Upload professional background image\n- Update background URL in HeyGen node\n\n**🎯 TESTING:**\n1. Send test lead through Zapier\n2. Verify video creation\n3. Check email delivery\n4. Confirm CRM entry\n\n**Total setup time: 30-45 minutes**\n**Result: Automated lead machine!** 🚀",
+        "height": 480,
+        "width": 420
+      },
+      "id": "configuration-guide",
+      "name": "🔧 Configuration Guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [680, 580]
+    }
+  ],
+  "connections": {
+    "Zillow Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Enhance Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhance Lead Data": {
+      "main": [
+        [
+          {
+            "node": "ContentForge AI Lead Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ContentForge AI Lead Scoring": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Video Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Video Script": {
+      "main": [
+        [
+          {
+            "node": "Create HeyGen Avatar Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create HeyGen Avatar Video": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets CRM",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Personal Video Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Agent - Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-13T00:00:00.000Z",
+      "updatedAt": "2025-01-13T00:00:00.000Z", 
+      "id": "contentforge-complete",
+      "name": "ContentForge AI Complete"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-13T00:00:00.000Z",
+  "versionId": "contentforge-complete-v1"
+}

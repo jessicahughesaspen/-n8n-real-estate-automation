@@ -1,0 +1,418 @@
+{
+  "name": "Aspen Real Estate Lead & Marketing Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "webhook",
+        "httpMethod": "POST",
+        "path": "zillow-lead",
+        "options": {}
+      },
+      "name": "Zillow Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [240, 300],
+      "webhookId": "zillow-leads-capture"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"property_price\"]}}",
+              "operation": "largerEqual",
+              "value2": "2000000"
+            }
+          ]
+        }
+      },
+      "name": "High-Value Lead Filter",
+      "type": "n8n-nodes-base.if",
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "contact",
+        "operation": "create",
+        "additionalFields": {
+          "lead_source": "Zillow Premium",
+          "property_interest": "={{$json[\"property_address\"]}}",
+          "lead_score": "=IF({{$json[\"property_price\"]}} > 5000000, 'Hot', IF({{$json[\"property_price\"]}} > 2000000, 'Warm', 'Cold'))",
+          "tags": "Aspen,Luxury,{{$json[\"lead_type\"]}}"
+        }
+      },
+      "name": "Add to CRM (High Value)",
+      "type": "n8n-nodes-base.hubspot",
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "create",
+        "additionalFields": {
+          "lead_source": "Zillow Standard",
+          "property_interest": "={{$json[\"property_address\"]}}",
+          "lead_score": "Cold",
+          "tags": "Aspen,Standard"
+        }
+      },
+      "name": "Add to CRM (Standard)",
+      "type": "n8n-nodes-base.hubspot",
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json[\"email\"]}}",
+        "subject": "Your Aspen Dream Home Awaits - Let's Connect!",
+        "emailType": "html",
+        "message": "Hi {{$json[\"first_name\"]}},\n\nThank you for your interest in {{$json[\"property_address\"]}}! As Aspen's premier luxury real estate specialist, I'd love to help you explore this incredible opportunity.\n\n🏔️ Why work with me?\n• $2+ Billion in Aspen luxury sales\n• Exclusive access to off-market properties\n• Deep local expertise (born and raised here)\n• White-glove concierge service\n\nI'll call you within 2 hours to discuss your needs and show you properties that match your vision.\n\nBest regards,\n[Your Name]\nAspen's #1 Luxury Real Estate Expert\n\nP.S. Ask me about our exclusive buyer's program with access to properties before they hit the market!"
+      },
+      "name": "High-Value Welcome Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json[\"email\"]}}",
+        "subject": "Welcome to Aspen Living - Your Journey Starts Here",
+        "emailType": "html",
+        "message": "Hi {{$json[\"first_name\"]}},\n\nThank you for your interest in Aspen real estate! I'm excited to help you discover the perfect mountain retreat.\n\n🎿 What makes Aspen special:\n• World-class skiing and outdoor recreation\n• Vibrant arts and culture scene\n• Strong investment potential\n• Unmatched luxury lifestyle\n\nI'll be in touch soon to learn about your preferences and show you what's available.\n\nBest,\n[Your Name]"
+      },
+      "name": "Standard Welcome Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "interval": [
+          {
+            "field": "cronExpression",
+            "expression": "0 9 * * 1"
+          }
+        ]
+      },
+      "name": "Monday Morning Trigger",
+      "type": "n8n-nodes-base.cron",
+      "position": [240, 600]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "requestMethod": "GET",
+        "url": "https://api.instagram.com/v1/media/recent",
+        "additionalFields": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer {{$credentials.instagram.accessToken}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Get Property Images",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "post",
+        "operation": "create",
+        "additionalFields": {
+          "caption": "🏔️ MILLION DOLLAR MONDAY 🏔️\n\nWelcome to this stunning {{$json[\"property_type\"]}} in {{$json[\"neighborhood\"]}}!\n\n✨ ${{$json[\"price\"]}} | {{$json[\"bedrooms\"]}} bed/{{$json[\"bathrooms\"]}} bath | {{$json[\"sqft\"]}} sq ft\n\n🎿 Features:\n• {{$json[\"feature1\"]}}\n• {{$json[\"feature2\"]}}\n• {{$json[\"feature3\"]}}\n\nDM me for a private showing!\n\n#AspenRealEstate #LuxuryHomes #MillionDollarMonday #AspenLifestyle #SkiIn SkiOut #MountainLiving #DreamHome",
+          "mediaUrls": "={{$json[\"property_images\"]}}"
+        }
+      },
+      "name": "Post Million Dollar Monday",
+      "type": "n8n-nodes-base.instagram",
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "interval": [
+          {
+            "field": "cronExpression", 
+            "expression": "0 10,14,18 * * *"
+          }
+        ]
+      },
+      "name": "Follow-up Schedule",
+      "type": "n8n-nodes-base.cron",
+      "position": [240, 800]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "getAll",
+        "additionalFields": {
+          "propertiesWithHistory": ["email", "phone", "last_contact_date", "lead_score"],
+          "filterGroups": [
+            {
+              "filters": [
+                {
+                  "propertyName": "last_contact_date",
+                  "operator": "LT",
+                  "value": "{{DateTime.now().minus({days: 3}).toISODate()}}"
+                },
+                {
+                  "propertyName": "lead_score",
+                  "operator": "EQ",
+                  "value": "Hot"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "name": "Get Overdue Hot Leads",
+      "type": "n8n-nodes-base.hubspot",
+      "position": [460, 800]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@yourdomain.com",
+        "subject": "🔥 HOT LEADS NEED ATTENTION - Aspen Real Estate",
+        "emailType": "html",
+        "message": "You have {{$json.length}} hot leads that haven't been contacted in 3+ days:\n\n{{#each $json}}\n• {{first_name}} {{last_name}} - {{email}} - {{phone}}\n  Interest: {{property_interest}}\n  Last Contact: {{last_contact_date}}\n{{/each}}\n\nTake action now before they go cold!"
+      },
+      "name": "Hot Lead Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [680, 800]
+    },
+    {
+      "parameters": {
+        "interval": [
+          {
+            "field": "cronExpression",
+            "expression": "0 15 * * 2,4"
+          }
+        ]
+      },
+      "name": "Content Creation Reminder",
+      "type": "n8n-nodes-base.cron",
+      "position": [240, 1000]
+    },
+    {
+      "parameters": {
+        "requestMethod": "GET",
+        "url": "https://api.unsplash.com/search/photos?query=aspen+colorado+luxury+home&client_id={{$credentials.unsplash.accessKey}}"
+      },
+      "name": "Get Stock Photos",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [460, 1000]
+    },
+    {
+      "parameters": {
+        "content": "📱 CONTENT IDEAS FOR THIS WEEK:\n\n🏔️ Tuesday: 'Ask Aspen's Expert' - Answer: 'Best time to buy in Aspen?'\n🎿 Wednesday: Client success story - '{{$json[\"recent_sale\"]}}'\n✨ Thursday: Neighborhood spotlight - Highlight {{$json[\"featured_area\"]}}\n🏡 Friday: Market update - '{{$json[\"market_trend\"]}}'\n\n📸 Photos ready to use: {{$json[\"photo_urls\"]}}\n\n⏰ Time to create: 20 minutes each",
+        "additionalFields": {
+          "title": "Weekly Content Plan - {{DateTime.now().toFormat('MMM dd')}}"
+        }
+      },
+      "name": "Generate Content Calendar",
+      "type": "n8n-nodes-base.markdown",
+      "position": [680, 1000]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@yourdomain.com",
+        "subject": "📅 Your Weekly Content Plan is Ready!",
+        "emailType": "html",
+        "message": "{{$json[\"content\"]}}"
+      },
+      "name": "Send Content Plan",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [900, 1000]
+    },
+    {
+      "parameters": {
+        "interval": [
+          {
+            "field": "cronExpression",
+            "expression": "0 17 * * 5"
+          }
+        ]
+      },
+      "name": "Weekly Performance Report",
+      "type": "n8n-nodes-base.cron",
+      "position": [240, 1200]
+    },
+    {
+      "parameters": {
+        "resource": "analytics",
+        "operation": "getAll",
+        "additionalFields": {
+          "dateRange": "last_7_days",
+          "metrics": ["leads_generated", "emails_sent", "calls_made", "showings_booked"]
+        }
+      },
+      "name": "Get Weekly Stats",
+      "type": "n8n-nodes-base.hubspot",
+      "position": [460, 1200]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@yourdomain.com",
+        "subject": "📊 Weekly Performance Report - Aspen Real Estate",
+        "emailType": "html",
+        "message": "WEEKLY PERFORMANCE SUMMARY\n\n📈 LEADS:\n• Total New Leads: {{$json[\"leads_generated\"]}}\n• High-Value Leads: {{$json[\"hot_leads\"]}}\n• Conversion Rate: {{$json[\"conversion_rate\"]}}%\n\n📧 OUTREACH:\n• Emails Sent: {{$json[\"emails_sent\"]}}\n• Calls Made: {{$json[\"calls_made\"]}}\n• Showings Booked: {{$json[\"showings_booked\"]}}\n\n🎯 FOCUS AREAS:\n• Follow up with {{$json[\"overdue_leads\"]}} overdue leads\n• Create content for next week\n• Review pricing on {{$json[\"stale_listings\"]}} listings\n\nKeep crushing it! 🏔️"
+      },
+      "name": "Send Performance Report",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [680, 1200]
+    }
+  ],
+  "connections": {
+    "Zillow Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "High-Value Lead Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High-Value Lead Filter": {
+      "main": [
+        [
+          {
+            "node": "Add to CRM (High Value)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add to CRM (Standard)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to CRM (High Value)": {
+      "main": [
+        [
+          {
+            "node": "High-Value Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to CRM (Standard)": {
+      "main": [
+        [
+          {
+            "node": "Standard Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday Morning Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Property Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Property Images": {
+      "main": [
+        [
+          {
+            "node": "Post Million Dollar Monday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up Schedule": {
+      "main": [
+        [
+          {
+            "node": "Get Overdue Hot Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Overdue Hot Leads": {
+      "main": [
+        [
+          {
+            "node": "Hot Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Creation Reminder": {
+      "main": [
+        [
+          {
+            "node": "Get Stock Photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stock Photos": {
+      "main": [
+        [
+          {
+            "node": "Generate Content Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Content Calendar": {
+      "main": [
+        [
+          {
+            "node": "Send Content Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Performance Report": {
+      "main": [
+        [
+          {
+            "node": "Get Weekly Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weekly Stats": {
+      "main": [
+        [
+          {
+            "node": "Send Performance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
